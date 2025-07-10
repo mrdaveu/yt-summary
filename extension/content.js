@@ -1,108 +1,79 @@
-import { getVideoIdFromUrl, getApiKey, postJson } from "./utils.js";
+const BACKEND = "https://YOUR-BACKEND.vercel.app";
 
-const BACKEND = "https://your-backend-domain.vercel.app";
+/* ------------------------------------------------------------------ */
+/* 1. observe new thumbnails on the YouTube homepage                  */
+const obs = new MutationObserver(ms =>
+  ms.forEach(m => m.addedNodes.forEach(n => n.nodeType === 1 && scan(n)))
+);
+obs.observe(document, { childList: true, subtree: true });
+scan(document);
 
-/** Observe added thumbnails on the homepage */
-const thumbObserver = new MutationObserver(mutations => {
-  mutations.forEach(m => {
-    m.addedNodes.forEach(n => {
-      if (n.nodeType === 1) scanForThumbnails(n);
-    });
-  });
-});
-thumbObserver.observe(document, { childList: true, subtree: true });
-scanForThumbnails(document);
-
-function scanForThumbnails(root) {
-  root.querySelectorAll("a#thumbnail:not([data-summarizer])").forEach(initThumb);
+function scan(root) {
+  root.querySelectorAll("a#thumbnail:not([data-summarizer])").forEach(init);
 }
 
-async function initThumb(a) {
-  a.dataset.summarizer = "true";
-  const videoId = getVideoIdFromUrl(a.href);
-  if (!videoId) return;
+async function init(a) {
+  a.dataset.summarizer = "1";
+  const id = getVideoIdFromUrl(a.href);
+  if (!id) return;
 
-  // create button container
+  /* inject btn */
   const btn = document.createElement("div");
   btn.className = "summary-btn loading";
   a.parentElement.style.position = "relative";
-  a.parentElement.appendChild(btn);
+  a.parentElement.append(btn);
 
-  // pre-check cache
+  /* ask backend for cache */
   try {
-    const res = await postJson(`${BACKEND}/api/summary`, { video_id: videoId });
-    if (res && res.short) {
-      btn.className = "summary-btn cached";
-      btn.title = "Hover for summaries";
-      attachCachedHover(btn, res);
-    } else {
-      btn.className = "summary-btn generate";
-      btn.textContent = "?";
-      btn.title = "What's this video about?";
-      btn.onclick = () => generateAndShow(btn, videoId);
-    }
+    const cache = await postJson(`${BACKEND}/api/summary`, { video_id: id });
+    if (cache && cache.short) renderCached(btn, cache);
+    else renderGenerate(btn, id);
   } catch (e) {
     console.error(e);
-    btn.remove(); // fail silently
+    btn.remove();
   }
 }
 
-function attachCachedHover(btn, summaries) {
-  const tooltip = document.createElement("div");
-  tooltip.className = "summary-tooltip";
-  tooltip.innerHTML = `
-      <p class="s s1">${summaries.short}</p>
-      <p class="s s2">${summaries.medium}</p>
-      <p class="s s3">${summaries.long}</p>`;
-  btn.onmouseenter = () => btn.appendChild(tooltip);
-  btn.onmouseleave = () => tooltip.remove();
+/* ------------------------------------------------------------------ */
+/* 2. render states                                                   */
+function renderCached(btn, s) {
+  btn.className = "summary-btn cached";
+  btn.title = "Hover for summaries";
+  const tip = document.createElement("div");
+  tip.className = "summary-tooltip";
+  tip.innerHTML = `
+    <p class="s1">${s.short}</p>
+    <p class="s2">${s.medium}</p>
+    <p class="s3">${s.long}</p>`;
+  btn.onmouseenter = () => btn.append(tip);
+  btn.onmouseleave = () => tip.remove();
 }
 
-async function generateAndShow(btn, videoId) {
-  btn.className = "summary-btn working";
-  btn.textContent = "…";
+function renderGenerate(btn, id) {
+  btn.className = "summary-btn generate";
+  btn.textContent = "?";
+  btn.title = "What's this video about?";
+  btn.onclick = () => generate(btn, id);
+}
+
+/* ------------------------------------------------------------------ */
+/* 3. generate summary + cache                                        */
+async function generate(btn, id) {
   try {
-    const transcript = await fetchTranscript(videoId);
-    const apiKey = await getApiKey();
-    const data = await postJson(`${BACKEND}/api/summarize`, {
-      video_id: videoId,
-      transcript,
-      openai_key: apiKey
+    btn.className = "summary-btn working";
+    btn.textContent = "…";
+
+    const { text } = await getTranscript(id);
+    const openai_key = await getApiKey();
+
+    const s = await postJson(`${BACKEND}/api/summarize`, {
+      video_id: id, transcript: text, openai_key
     });
-    attachCachedHover(btn, data);
-    btn.className = "summary-btn cached";
-    btn.textContent = "";
+
+    renderCached(btn, s);
   } catch (err) {
     console.error(err);
     btn.textContent = "×";
     btn.title = err.message;
   }
-}
-
-/** Client-side transcript fetch via POST */
-async function fetchTranscript(videoId) {
-  const payload = {
-    context: {
-      client: { clientName: "WEB", clientVersion: "2.20250701.00.00" }
-    },
-    externalVideoId: videoId,
-    languageCode: "en",
-    kind: "asr"
-  };
-  const res = await fetch(
-    "https://www.youtube.com/youtubei/v1/get_transcript?key=AIzaSyDQ-FAKE-KEY-Zk", // YouTube internal key leakage is common; rotate when needed
-    {
-      method: "POST",
-      credentials: "omit",
-      mode: "cors",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }
-  );
-  if (!res.ok) throw new Error("Transcript fetch failed");
-  const data = await res.json();
-  // Minimal parsing: flatten text runs
-  return data?.actions
-    ?.flatMap(a => a?.updateEngagementPanelAction?.content?.transcriptRenderer?.body?.url)
-    ?.join(" ") ?? "";
 }
