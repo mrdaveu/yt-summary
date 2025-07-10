@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>OpenAI Key</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; max-width: 500px; }
+    input { width: 100%; padding: 8px; }
+    p.warn { color: darkred; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h2>OpenAI API key</h2>
+  <input id="key" placeholder="sk-..." />
+  <button id="save">Save</button>
+  <p class="warn">⚠️ Your key is stored <strong>unencrypted</strong> in Chrome
+    sync storage. Anyone with access to this browser profile can read it.</p>
+  <script src="options.js"></script>
+</body>
+</html>
