@@ -8,7 +8,7 @@
   "host_permissions": [
     "https://*.youtube.com/*",
     "https://api.openai.com/*",
-    "https://YOUR-BACKEND.vercel.app/*"
+    "https://yt-summary-dun.vercel.app/*"
   ],
 
   "content_scripts": [

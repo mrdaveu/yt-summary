@@ -1,4 +1,4 @@
-const BACKEND = "https://YOUR-BACKEND.vercel.app";
+const BACKEND = "https://yt-summary-dun.vercel.app";
 
 /* ------------------------------------------------------------------ */
 /* 1. observe new thumbnails on the YouTube homepage                  */
